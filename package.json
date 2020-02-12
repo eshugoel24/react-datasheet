@@ -1,12 +1,18 @@
 {
-  "name": "react-datasheet",
-  "version": "1.4.0",
+  "name": "react-datasheet-extended",
+  "version": "1.0.0",
   "description": "Excel-like data grid for React",
   "repository": {
     "type": "git",
     "url": "https://github.com/nadbm/react-datasheet.git"
   },
   "author": "Nadim Islam",
+  "contributors": [
+    {
+      "name": "Eshu Goel",
+      "email": "eshugoel24@gmail.com"
+    }
+  ],
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/nadbm/react-datasheet/issues"
