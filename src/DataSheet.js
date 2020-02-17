@@ -351,7 +351,7 @@ export default class DataSheet extends PureComponent {
             editing: {}
           })
           e.preventDefault()
-          const cellNode = this.dataCellRefs[start.i + ' - ' + end.j]
+          const cellNode = this.dataCellRefs[start.i + '-' + end.j]
           if (cellNode) {
             ReactDOM.findDOMNode(cellNode).scrollIntoView()
           }
