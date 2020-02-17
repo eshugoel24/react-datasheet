@@ -1,4 +1,5 @@
 import React, { PureComponent } from 'react'
+import ReactDOM from 'react-dom'
 import PropTypes from 'prop-types'
 import Sheet from './Sheet'
 import Row from './Row'
@@ -44,9 +45,13 @@ export default class DataSheet extends PureComponent {
     this.isSelected = this.isSelected.bind(this)
     this.isEditing = this.isEditing.bind(this)
     this.isClearing = this.isClearing.bind(this)
+    this.setDataCellRef = this.setDataCellRef.bind(this)
+
     this.handleComponentKey = this.handleComponentKey.bind(this)
 
     this.handleKeyboardCellMovement = this.handleKeyboardCellMovement.bind(this)
+
+    this.dataCellRefs = []
 
     this.defaultState = {
       start: {},
@@ -346,6 +351,10 @@ export default class DataSheet extends PureComponent {
             editing: {}
           })
           e.preventDefault()
+          const cellNode = this.dataCellRefs[start.i + ' - ' + end.j]
+          if (cellNode) {
+            ReactDOM.findDOMNode(cellNode).scrollIntoView()
+          }
           return true
         }
         return false
@@ -491,6 +500,10 @@ export default class DataSheet extends PureComponent {
     return this.state.clear.i === i && this.state.clear.j === j
   }
 
+  setDataCellRef (ref, index) {
+    this.dataCellRefs[index] = ref
+  }
+
   render () {
     const {sheetRenderer: SheetRenderer, rowRenderer: RowRenderer, cellRenderer,
       dataRenderer, valueRenderer, dataEditor, valueViewer, attributesRenderer,
@@ -506,6 +519,7 @@ export default class DataSheet extends PureComponent {
                 row.map((cell, j) => {
                   return (
                     <DataCell
+                      ref={(ref) => this.setDataCellRef(ref, `${i}-${j}`)}
                       key={cell.key ? cell.key : `${i}-${j}`}
                       row={i}
                       col={j}
