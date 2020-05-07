@@ -60,6 +60,7 @@ export default class DataSheet extends PureComponent {
     this.state = this.defaultState
 
     this.removeAllListeners = this.removeAllListeners.bind(this)
+    this.handleIEClipboardEvents = this.handleIEClipboardEvents.bind(this)
   }
 
   removeAllListeners () {
@@ -68,7 +69,7 @@ export default class DataSheet extends PureComponent {
     document.removeEventListener('cut', this.handleCut)
     document.removeEventListener('copy', this.handleCopy)
     document.removeEventListener('paste', this.handlePaste)
-    document.removeEventListener('keydown', this.handlePaste)
+    document.removeEventListener('keydown', this.handleIEClipboardEvents)
   }
 
   componentDidMount () {
@@ -132,6 +133,21 @@ export default class DataSheet extends PureComponent {
     }
   }
 
+  handleIEClipboardEvents (e) {
+    if (e.ctrlKey) {
+      if (e.keyCode === 67) {
+        // C - copy
+        this.handleCopy(e)
+      } else if (e.keyCode === 88) {
+        // X - cut
+        this.handleCut(e)
+      } else if (e.keyCode === 86 || e.which === 86) {
+        // P - patse
+        this.handlePaste(e)
+      }
+    }
+  }
+
   handleCopy (e) {
     if (isEmpty(this.state.editing)) {
       e.preventDefault()
@@ -148,7 +164,11 @@ export default class DataSheet extends PureComponent {
           return value
         }).join('\t')
       ).join('\n')
-      e.clipboardData.setData('text/plain', text)
+      if (window.clipboardData && window.clipboardData.setData) {
+        window.clipboardData.setData('Text', text)
+      } else {
+        e.clipboardData.setData('text/plain', text)
+      }
     }
   }
 
@@ -290,10 +310,10 @@ export default class DataSheet extends PureComponent {
           this._setState({editing: start, clear: {}, forceEdit: true})
           e.preventDefault()
         } else if (numbersPressed ||
-            numPadKeysPressed ||
-            lettersPressed ||
-            latin1Supplement ||
-            equationKeysPressed) {
+          numPadKeysPressed ||
+          lettersPressed ||
+          latin1Supplement ||
+          equationKeysPressed) {
           // empty out cell if user starts typing without pressing enter
           this._setState({editing: start, clear: start, forceEdit: false})
         }
@@ -333,36 +353,83 @@ export default class DataSheet extends PureComponent {
     }
   }
 
+  updateLocationSingleCell (location) {
+    this._setState({
+      start: location,
+      end: location,
+      editing: {}
+    })
+  }
+
+  updateLocationMultipleCells (offsets) {
+    const {start, end} = this.getState()
+    const {data} = this.props
+    const oldStartLocation = {i: start.i, j: start.j}
+    const newEndLocation = {
+      i: Math.min(data.length - 1, Math.max(0, end.i + offsets.i)),
+      j: Math.min(data[0].length - 1, Math.max(0, end.j + offsets.j))
+    }
+    this._setState({
+      start: oldStartLocation,
+      end: newEndLocation,
+      editing: {}
+    })
+  }
+
+  searchForNextSelectablePos (isCellNavigable, data, start, offsets, jumpRow) {
+    const previousRow = (location) => ({ i: location.i - 1, j: data[0].length - 1 })
+    const nextRow = (location) => ({ i: location.i + 1, j: 0 })
+    const advanceOffset = (location) => ({i: location.i + offsets.i, j: location.j + offsets.j})
+    const isCellDefined = ({i, j}) => data[i] && typeof (data[i][j]) !== 'undefined'
+
+    let newLocation = advanceOffset(start)
+
+    while (
+      isCellDefined(newLocation) &&
+      !isCellNavigable(data[newLocation.i][newLocation.j], newLocation.i, newLocation.j)
+    ) {
+      newLocation = advanceOffset(newLocation)
+    }
+
+    if (!isCellDefined(newLocation)) {
+      if (!jumpRow) {
+        return null
+      }
+      if (offsets.j < 0) {
+        newLocation = previousRow(newLocation)
+      } else {
+        newLocation = nextRow(newLocation)
+      }
+    }
+
+    if (
+      isCellDefined(newLocation) &&
+      !isCellNavigable(data[newLocation.i][newLocation.j], newLocation.i, newLocation.j)) {
+      return this.searchForNextSelectablePos(isCellNavigable, data, newLocation, offsets, jumpRow)
+    } else if (isCellDefined(newLocation)) {
+      return newLocation
+    } else {
+      return null
+    }
+  }
+
   handleNavigate (e, offsets, jumpRow) {
     if (offsets && (offsets.i || offsets.j)) {
-      const {start, end} = this.getState()
-      const {data} = this.props
-      const oldStartLocation = {i: start.i, j: start.j}
-      const newEndLocation = {i: end.i + offsets.i, j: end.j + offsets.j}
+      const { data } = this.props
+      const { start } = this.getState()
 
-      const startJ = start.j + offsets.j
-      let newLocation = {i: start.i + offsets.i, j: (startJ > 0 ? startJ : 0)}
+      const multiSelect = e.shiftKey && !jumpRow
+      const isCellNavigable = this.props.isCellNavigable ? this.props.isCellNavigable : () => true
 
-      const updateLocation = () => {
-        if (data[newLocation.i] && typeof (data[newLocation.i][newLocation.j]) !== 'undefined') {
-          this._setState({
-            start: e.shiftKey && !jumpRow ? oldStartLocation : newLocation,
-            end: e.shiftKey && !jumpRow ? newEndLocation : newLocation,
-            editing: {}
-          })
-          e.preventDefault()
-          return true
+      if (multiSelect) {
+        this.updateLocationMultipleCells(offsets)
+      } else {
+        const newLocation = this.searchForNextSelectablePos(isCellNavigable, data, start, offsets, jumpRow)
+        if (newLocation) {
+          this.updateLocationSingleCell(newLocation)
         }
-        return false
       }
-      if (!updateLocation() && jumpRow) {
-        if (offsets.j < 0) {
-          newLocation = {i: start.i - 1, j: data[0].length - 1}
-        } else {
-          newLocation = {i: start.i + 1, j: 0}
-        }
-        updateLocation()
-      }
+      e.preventDefault()
     }
   }
 
@@ -423,11 +490,7 @@ export default class DataSheet extends PureComponent {
     var isIE = /MSIE|Trident/.test(ua)
     // Listen for Ctrl + V in case of IE
     if (isIE) {
-      document.addEventListener('keydown', (e) => {
-        if ((e.keyCode === 86 || e.which === 86) && e.ctrlKey) {
-          this.handlePaste(e)
-        }
-      })
+      document.addEventListener('keydown', this.handleIEClipboardEvents)
     }
 
     // Keep listening to mouse if user releases the mouse (dragging outside)
@@ -483,9 +546,9 @@ export default class DataSheet extends PureComponent {
     const negY = (i <= start.i && i >= end.i)
 
     return (posX && posY) ||
-        (negX && posY) ||
-        (negX && negY) ||
-        (posX && negY)
+      (negX && posY) ||
+      (negX && negY) ||
+      (posX && negY)
   }
 
   isEditing (i, j) {
@@ -538,7 +601,7 @@ export default class DataSheet extends PureComponent {
                       {... isEditing ? {
                         onEdit: this.handleEdit
                       }
-                      : {}
+                        : {}
                       }
                     />
                   )
@@ -560,6 +623,7 @@ DataSheet.propTypes = {
   onCellsChanged: PropTypes.func,
   onContextMenu: PropTypes.func,
   onSelect: PropTypes.func,
+  isCellNavigable: PropTypes.func,
   selected: PropTypes.shape({
     start: PropTypes.shape({
       i: PropTypes.number,
